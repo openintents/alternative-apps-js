@@ -17,44 +17,43 @@
 
 // Shortcuts to DOM Elements.
 var messageForm = document.getElementById('message-form');
-var messageInput = document.getElementById('new-post-message');
-var titleInput = document.getElementById('new-post-title');
+var messageInput = document.getElementById('new-intent-spec-details');
+var titleInput = document.getElementById('new-intent-spec-title');
+var actionInput = document.getElementById('new-intent-spec-action');
 var signInButton = document.getElementById('sign-in-button');
 var splashPage = document.getElementById('page-splash');
 var addPost = document.getElementById('add-post');
 var addButton = document.getElementById('add');
 var recentPostsSection = document.getElementById('recent-posts-list');
 var userPostsSection = document.getElementById('user-posts-list');
-var topUserPostsSection = document.getElementById('top-user-posts-list');
 var recentMenuButton = document.getElementById('menu-recent');
 var myPostsMenuButton = document.getElementById('menu-my-posts');
-var myTopPostsMenuButton = document.getElementById('menu-my-top-posts');
 
 /**
- * Saves a new post to the Firebase DB.
+ * Saves a new intent specification to the Firebase DB.
  */
-// [START write_fan_out]
-function writeNewPost(uid, username, title, body) {
+function writeNewIntentSpecification(uid, username, title, action, body) {
   // A post entry.
-  var postData = {
+  var intentSpecData = {
     author: username,
     uid: uid,
     body: body,
     title: title,
+    action: action,
     starCount: 0
   };
 
-  // Get a key for a new Post.
-  var newPostKey = firebase.database().ref().child('posts').push().key;
+  // Get a key for a new intent specification.
+  var newIntentSpecKey = action.replace(/\./g,'_');
 
   // Write the new post's data simultaneously in the posts list and the user's post list.
   var updates = {};
-  updates['/posts/' + newPostKey] = postData;
-  updates['/user-posts/' + uid + '/' + newPostKey] = postData;
+  updates['/specification/' + newIntentSpecKey] = intentSpecData;
+  updates['/user-specification/' + uid + '/' + newIntentSpecKey] = intentSpecData;
 
   return firebase.database().ref().update(updates);
 }
-// [END write_fan_out]
+
 
 /**
  * Star/unstar post.
@@ -80,7 +79,7 @@ function toggleStar(postRef, uid) {
 /**
  * Creates a post element.
  */
-function createPostElement(postId, title, text, author) {
+function createPostElement(actionId, title, action, text, author) {
   var uid = firebase.auth().currentUser.uid;
 
   var html =
@@ -101,9 +100,10 @@ function createPostElement(postId, title, text, author) {
             '<div class="stared material-icons">star</div>' +
             '<div class="star-count">0</div>' +
           '</span>' +
+          '<div class="action"></div>' +
           '<div class="text"></div>' +
           '<div class="comments-container"></div>' +
-          '<form class="add-comment" action="#">' +
+          '<form style="display:none" class="add-comment" action="#">' +
             '<div class="mdl-textfield mdl-js-textfield">' +
               '<input class="mdl-textfield__input new-comment" type="text">' +
               '<label class="mdl-textfield__label">Comment...</label>' +
@@ -125,18 +125,19 @@ function createPostElement(postId, title, text, author) {
 
   // Set values.
   postElement.getElementsByClassName('text')[0].innerText = text;
+  postElement.getElementsByClassName('action')[0].innerText = action;
   postElement.getElementsByClassName('mdl-card__title-text')[0].innerText = title;
   postElement.getElementsByClassName('username')[0].innerText = author;
 
   // Listen for comments.
   // [START child_event_listener_recycler]
-  var commentsRef = firebase.database().ref('post-comments/' + postId);
+  var commentsRef = firebase.database().ref('action/' + actionId + '/packages');
   commentsRef.on('child_added', function(data) {
-    addCommentElement(postElement, data.key, data.val().text, data.val().author);
+    addCommentElement(postElement, data.key, data.val().packageName);
   });
 
   commentsRef.on('child_changed', function(data) {
-    setCommentValues(postElement, data.key, data.val().text, data.val().author);
+    setCommentValues(postElement, data.key, data.val().packageName);
   });
 
   commentsRef.on('child_removed', function(data) {
@@ -146,20 +147,20 @@ function createPostElement(postId, title, text, author) {
 
   // Listen for likes counts.
   // [START post_value_event_listener]
-  firebase.database().ref('posts/' + postId + '/starCount').on('value', function(snapshot) {
+  firebase.database().ref('action/' + actionId + '/starCount').on('value', function(snapshot) {
     updateStarCount(postElement, snapshot.val());
   });
   // [END post_value_event_listener]
 
   // Listen for the stared status.
-  firebase.database().ref('posts/' + postId + '/stars/' + uid).on('value', function(snapshot) {
+  firebase.database().ref('action/' + actionId + '/stars/' + uid).on('value', function(snapshot) {
     updateStarredByCurrentUser(postElement, snapshot.val());
   });
 
   // Create new comment.
   addCommentForm.onsubmit = function(e) {
     e.preventDefault();
-    createNewComment(postId, firebase.auth().currentUser.displayName, uid, commentInput.value);
+    createNewComment(actionId, firebase.auth().currentUser.displayName, uid, commentInput.value);
     commentInput.value = '';
     commentInput.parentElement.MaterialTextfield.boundUpdateClassesHandler();
   };
@@ -211,24 +212,31 @@ function updateStarCount(postElement, nbStart) {
 /**
  * Creates a comment element and adds it to the given postElement.
  */
-function addCommentElement(postElement, id, text, author) {
-  var comment = document.createElement('div');
-  comment.classList.add('comment-' + id);
-  comment.innerHTML = '<span class="username"></span><span class="comment"></span>';
-  comment.getElementsByClassName('comment')[0].innerText = text;
-  comment.getElementsByClassName('username')[0].innerText = author;
+function addCommentElement(postElement, id, packageName) {
+  var xobj = createCORSRequest('GET', 'http://microdata-extractor.improbable.org/extract/?url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3D'+ packageName);
+  xobj.setRequestHeader('Accept', 'application/json');
+  xobj.onreadystatechange = function () {
+          if (xobj.readyState == 4 && xobj.status == "200") {
+            // Required use of an anonymous callback as .open will NOT return a value but simply returns undefined in asynchronous mode
+            var metadata = JSON.parse(xobj.responseText);
+            var comment = document.createElement('div');
+            comment.classList.add('comment-' + id);
+            comment.innerHTML = '<img src="' +metadata['_:gs0']['http://schema.org/image'][0].value + '"/>';
 
-  var commentsContainer = postElement.getElementsByClassName('comments-container')[0];
-  commentsContainer.appendChild(comment);
+            var commentsContainer = postElement.getElementsByClassName('comments-container')[0];
+            commentsContainer.appendChild(comment);
+          }
+  };
+  xobj.send(null);
+
 }
 
 /**
  * Sets the comment's values in the given postElement.
  */
-function setCommentValues(postElement, id, text, author) {
+function setCommentValues(postElement, id, text) {
   var comment = postElement.getElementsByClassName('comment-' + id)[0];
   comment.getElementsByClassName('comment')[0].innerText = text;
-  comment.getElementsByClassName('fp-username')[0].innerText = author;
 }
 
 /**
@@ -245,25 +253,24 @@ function deleteComment(postElement, id) {
 function startDatabaseQueries() {
   // [START my_top_posts_query]
   var myUserId = firebase.auth().currentUser.uid;
-  var topUserPostsRef = firebase.database().ref('user-posts/' + myUserId).orderByChild('starCount');
+  var topUserPostsRef = firebase.database().ref('user-specification/' + myUserId).orderByChild('starCount');
   // [END my_top_posts_query]
   // [START recent_posts_query]
-  var recentPostsRef = firebase.database().ref('posts').limitToLast(100);
+  var recentPostsRef = firebase.database().ref('specification').limitToLast(100);
   // [END recent_posts_query]
-  var userPostsRef = firebase.database().ref('user-posts/' + myUserId);
+  var userPostsRef = firebase.database().ref('user-specification/' + myUserId);
 
   var fetchPosts = function(postsRef, sectionElement) {
     postsRef.on('child_added', function(data) {
       var containerElement = sectionElement.getElementsByClassName('posts-container')[0];
       containerElement.insertBefore(
-          createPostElement(data.key, data.val().title, data.val().body, data.val().author),
+          createPostElement(data.key, data.val().title, data.val().action, data.val().body, data.val().author),
           containerElement.firstChild);
     });
   };
 
-  fetchPosts(topUserPostsRef, topUserPostsSection);
-  fetchPosts(recentPostsRef, userPostsSection);
-  fetchPosts(userPostsRef, recentPostsSection);
+  fetchPosts(recentPostsRef, recentPostsSection);
+  fetchPosts(userPostsRef, userPostsSection);
 }
 
 /**
@@ -277,6 +284,56 @@ function writeUserData(userId, name, email) {
   });
 }
 // [END basic_write]
+
+function createCORSRequest(method, url) {
+  var xhr = new XMLHttpRequest();
+  if ("withCredentials" in xhr) {
+    // Check if the XMLHttpRequest object has a "withCredentials" property.
+    // "withCredentials" only exists on XMLHTTPRequest2 objects.
+    xhr.open(method, url, true);
+  } else if (typeof XDomainRequest != "undefined") {
+    // Otherwise, check if XDomainRequest.
+    // XDomainRequest only exists in IE, and is IE's way of making CORS requests.
+    xhr = new XDomainRequest();
+    xhr.open(method, url);
+  } else {
+    // Otherwise, CORS is not supported by the browser.
+    xhr = null;
+  }
+  return xhr;
+}
+
+function verifyIntentSpecs() {
+  var xobj = createCORSRequest('GET', 'http://www.openintents.org/feed.json');
+  xobj.onreadystatechange = function () {
+          if (xobj.readyState == 4 && xobj.status == "200") {
+            // Required use of an anonymous callback as .open will NOT return a value but simply returns undefined in asynchronous mode
+            var intentSpecs = JSON.parse(xobj.responseText);
+            firebase.database().ref('specification/').once('value').then(function(snapshot) {
+              for (var action in intentSpecs) {
+                if (action == "lastitem") {
+                  continue;
+                }
+                var key = action.replace(/\./g,'_');
+                snapshot.ref.child(key).set(intentSpecs[action]);
+              }
+            });
+          }
+  };
+  xobj.send(null);
+}
+
+function verifyActions() {
+  firebase.database().ref('action/').once('value').then(function(snapshot) {
+    var specRef = firebase.database().ref('specification/').once('value').then(function(specSnapshot) {
+      for (var actionKey in snapshot.val()) {
+        if (!specSnapshot.hasChild(actionKey)) {
+          console.log(actionKey +  " missing");
+        }
+      }
+    });
+  });
+}
 
 // Bindings on load.
 window.addEventListener('load', function() {
@@ -297,24 +354,22 @@ window.addEventListener('load', function() {
     }
   });
 
+  verifyActions();
+
   // Saves message on form submit.
   messageForm.onsubmit = function(e) {
     e.preventDefault();
-    if (messageInput.value && titleInput.value) {
+    if (messageInput.value && titleInput.value && actionInput.value) {
       var postText = messageInput.value;
       messageInput.value = '';
-      // [START single_value_read]
       var userId = firebase.auth().currentUser.uid;
       firebase.database().ref('/users/' + userId).once('value').then(function(snapshot) {
         var username = snapshot.val().username;
-        // [START_EXCLUDE]
-        writeNewPost(firebase.auth().currentUser.uid, firebase.auth().currentUser.displayName,
-            titleInput.value, postText).then(function() {
+        writeNewIntentSpecification(firebase.auth().currentUser.uid, firebase.auth().currentUser.displayName,
+            titleInput.value, actionInput.value, postText).then(function() {
               myPostsMenuButton.click();
             });
-        // [END_EXCLUDE]
       });
-      // [END single_value_read]
     }
   };
 
@@ -322,38 +377,24 @@ window.addEventListener('load', function() {
   recentMenuButton.onclick = function() {
     recentPostsSection.style.display = 'block';
     userPostsSection.style.display = 'none';
-    topUserPostsSection.style.display = 'none';
     addPost.style.display = 'none';
     recentMenuButton.classList.add('is-active');
     myPostsMenuButton.classList.remove('is-active');
-    myTopPostsMenuButton.classList.remove('is-active');
+
   };
   myPostsMenuButton.onclick = function() {
     recentPostsSection.style.display = 'none';
     userPostsSection.style.display = 'block';
-    topUserPostsSection.style.display = 'none';
     addPost.style.display = 'none';
     recentMenuButton.classList.remove('is-active');
     myPostsMenuButton.classList.add('is-active');
-    myTopPostsMenuButton.classList.remove('is-active');
-  };
-  myTopPostsMenuButton.onclick = function() {
-    recentPostsSection.style.display = 'none';
-    userPostsSection.style.display = 'none';
-    topUserPostsSection.style.display = 'block';
-    addPost.style.display = 'none';
-    recentMenuButton.classList.remove('is-active');
-    myPostsMenuButton.classList.remove('is-active');
-    myTopPostsMenuButton.classList.add('is-active');
   };
   addButton.onclick = function() {
     recentPostsSection.style.display = 'none';
     userPostsSection.style.display = 'none';
-    topUserPostsSection.style.display = 'none';
     addPost.style.display = 'block';
     recentMenuButton.classList.remove('is-active');
     myPostsMenuButton.classList.remove('is-active');
-    myTopPostsMenuButton.classList.remove('is-active');
     messageInput.value = '';
     titleInput.value = '';
   };

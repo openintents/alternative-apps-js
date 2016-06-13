@@ -1,4 +1,4 @@
-Firebase Realtime Database Quickstart
+Alternative Android apps
 =============================
 
 The Firebase Database quickstart demonstrates how to connect to the Firebase Realtime Database and

@@ -31,7 +31,7 @@ a {
     display: block;
 }
 h3 {
-    background: url('firebase-logo.png') no-repeat;
+    background: url('logo.png') no-repeat;
     background-size: 40px;
     padding-left: 50px;
     background-position-y: -2px;
@@ -48,10 +48,10 @@ h3 {
 /* Overrides MDL colors */
 .mdl-layout.is-upgraded .mdl-layout__tab.is-active::after,
 .header .mdl-textfield__label:after {
-    background-color: #FFCA28;
+    background-color: #dcc429;
 }
 .mdl-snackbar__action {
-    color: #FFCA28;
+    color: #dcc429;
 }
 .mdl-textfield__label:after {
     background-color: #0288D1;
@@ -244,7 +244,7 @@ h3 {
 .post .header {
     padding: 10px;
     width: calc(100% - 100px);
-    display: inline-block;
+    display: none;
 }
 .post .star-count {
     color: #444;
@@ -258,8 +258,13 @@ h3 {
     padding: 15px 10px 0 10px;
 }
 .post .text {
-    padding: 0 10px;
+    padding: 10px 10px;
     color: grey;
+}
+.post .action {
+    padding: 10px 10px 10px 10px;
+    color: grey;
+    background-color: #dcc429;
 }
 .post .comments-container .text {
     margin-left: 5px;
@@ -278,6 +283,7 @@ h3 {
     position: absolute;
     top: 10px;
     right: 0;
+    display: none;
 }
 .post .star .material-icons {
     font-size: 35px;
